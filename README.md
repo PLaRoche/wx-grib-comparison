@@ -45,6 +45,29 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Project Structure
+
+- `run_ensemble.py`: Main script that combines download, processing, analysis, and visualization
+- `download_ensemble.py`: Functions for downloading GRIB2 data from different models
+- `process_ensemble.py`: Functions for processing GRIB2 files into DataFrames
+- `analyze_ensemble.py`: Functions for analyzing the processed data
+- `visualize_ensemble.py`: Functions for generating plots and visualizations
+
+Directory Structure:
+```
+.
+├── gribs/                    # Main directory for all GRIB files
+│   ├── gfs_gribs/           # GFS model files
+│   ├── hrrr_gribs/          # HRRR model files
+│   ├── icon_gribs/          # ICON model files
+│   ├── cmc_gribs/           # CMC model files
+│   ├── nam_gribs/           # NAM model files
+│   ├── nbm_gribs/           # NBM model files
+│   └── rap_gribs/           # RAP model files
+├── ensemble_output/         # Output directory for analysis and plots
+└── ...                     # Other project files
+```
+
 ## Usage
 
 1. Configure your analysis parameters in `run_ensemble.py`:
@@ -55,30 +78,24 @@ pip install -r requirements.txt
 
 2. Run the analysis:
 ```bash
-python3 run_ensemble.py [--skip-download]
+python3 run_ensemble.py [--skip-download] [--hours HOURS]
 ```
 
 Arguments:
 - `--skip-download`: Optional. Skip downloading new forecast data and use existing files in the data directory.
+- `--hours`: Optional. Number of hours of weather data to download (default: 72).
 
 This will:
-1. Download forecast data from GFS and HRRR (unless --skip-download is specified)
+1. Download forecast data from all configured models (unless --skip-download is specified)
 2. Process the GRIB2 files
 3. Analyze and generate plots showing the forecasts
-
-## Project Structure
-
-- `run_ensemble.py`: Main script that combines download, processing, analysis, and visualization
-- `download_ensemble.py`: Functions for downloading GRIB2 data from different models
-- `process_ensemble.py`: Functions for processing GRIB2 files into DataFrames
-- `analyze_ensemble.py`: Functions for analyzing the processed data
-- `visualize_ensemble.py`: Functions for generating plots and visualizations
 
 ## Notes
 
 - The code is currently set up for the Halifax Harbour region, but you can change the latitude/longitude bounds in `run_ensemble.py`.
-- Only GFS and HRRR are currently downloaded and processed. ICON and CMC support can be re-enabled by updating the workflow and download functions.
+- All models (GFS, HRRR, ICON, CMC, NAM, NBM, RAP) are supported and will be downloaded and processed.
 - The code robustly handles variable extraction and missing data in GRIB files, making it more reliable for operational use.
+- The `--hours` argument allows you to customize the forecast window (default is 72 hours).
 
 ## License
 

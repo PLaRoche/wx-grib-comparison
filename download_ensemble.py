@@ -313,335 +313,367 @@ def get_latest_sref_run():
                 print(f"Error checking SREF run: {str(e)}")
     return None
 
-def download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gfs_gribs", resolution='0.25'):
-    os.makedirs(out_dir, exist_ok=True)
-    config = MODEL_RESOLUTIONS['gfs'][resolution]
-    base_url = config['url']
-    
-    # Get latest available run
-    run_time = get_latest_gfs_run()
-    if run_time is None:
-        logger.error("No available GFS runs found in the last 3 days")
-        return
-        
-    run_date = run_time.strftime("%Y%m%d")
-    run_str = run_time.strftime("%H")
-    logger.info(f"Using GFS {resolution}° run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
-    
-    # Check available forecast hours
+def download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gribs", resolution='0.25'):
+    """
+    Download GFS GRIB files for the specified region and variables.
+    """
     try:
-        dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.{run_date}/{run_str}/atmos"
-        r = requests.get(dir_url, timeout=10)
-        if r.status_code == 200:
-            import re
-            pattern = re.compile(r"gfs\.t" + run_str + r"z\.pgrb2\.0p25\.f(\d{3})")
-            available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
-            if available_hours:
-                max_hour = min(max(available_hours), hours)
-                logger.info(f"Detected max available GFS forecast hour: {max_hour}")
-            else:
-                logger.warning(f"No GFS forecast hours found in directory listing, defaulting to {hours}")
-                max_hour = hours
-        else:
-            logger.warning(f"Could not access GFS directory listing (status {r.status_code}), defaulting to {hours}")
-            max_hour = hours
-    except Exception as e:
-        logger.warning(f"Error accessing GFS directory listing: {e}, defaulting to {hours}")
-        max_hour = hours
-    
-    for fh in range(0, max_hour+1, 1):  # hourly steps
-        params = {
-            "file": config['file_pattern'].format(run_str=run_str, fh=fh),
-            "lev_2_m_above_ground": "on",
-            "lev_10_m_above_ground": "on",
-            "var_UGRD": "on" if "u10" in variables else "off",
-            "var_VGRD": "on" if "v10" in variables else "off",
-            "var_TMP": "on" if "t2m" in variables else "off",
-            "var_PRATE": "on" if "prate" in variables else "off",
-            "subregion": "",
-            "leftlon": lon_min,
-            "rightlon": lon_max,
-            "toplat": lat_max,
-            "bottomlat": lat_min,
-            "dir": config['dir_pattern'].format(date_str=run_date, run_str=run_str)
-        }
-        url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
-        out_path = os.path.join(out_dir, f"gfs_{resolution}_{run_date}_{run_str}_f{fh:03d}.grib2")
-        logger.info(f"Downloading GFS {resolution}° forecast hour {fh}: {url} ...")
-        try:
-            r = requests.get(url, timeout=30)
-            if r.status_code == 200:
-                with open(out_path, "wb") as f:
-                    f.write(r.content)
-                logger.info(f"Saved {out_path}")
-            else:
-                logger.error(f"Failed to download GFS {resolution}° forecast hour {fh}: {url} (Status code: {r.status_code})")
-        except Exception as e:
-            logger.error(f"Error downloading GFS {resolution}° forecast hour {fh}: {str(e)}")
-
-def download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="icon_gribs", resolution='13km'):
-    os.makedirs(out_dir, exist_ok=True)
-    
-    # Get latest available run
-    run_time = get_latest_icon_run()
-    if run_time is None:
-        logger.error("No available ICON runs found in the last 3 days")
-        return
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(out_dir, "gfs_gribs")
+        os.makedirs(output_dir, exist_ok=True)
+        config = MODEL_RESOLUTIONS['gfs'][resolution]
+        base_url = config['url']
         
-    run_date = run_time.strftime("%Y%m%d")
-    run_str = run_time.strftime("%H")
-    logger.info(f"Using ICON run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
-    
-    # Map our variable names to ICON variable names
-    variable_map = {
-        "u10": "U_10M",
-        "v10": "V_10M",
-        "t2m": "T_2M",
-        "prate": "TOT_PREC"  # Note: This is accumulated precipitation, not rate
-    }
-    
-    # Determine the correct base URL and patterns based on resolution
-    if resolution == '13km':
-        # Global model
-        base_url = f"https://opendata.dwd.de/weather/nwp/icon/grib/global/{run_date}{run_str}"
-        file_pattern = "icon_global_regular_0.25_{param}_{level}_{fh:03d}_{time_str}.grib2.bz2"
-    else:
-        # Europe model with 7km resolution
-        base_url = f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{run_date}{run_str}"
-        file_pattern = "icon-eu_europe_regular-lat-lon_{param}_{level}_{fh:03d}_{time_str}.grib2.bz2"
-    
-    # First, list the directory to find available files
-    try:
-        r = requests.get(base_url, timeout=10)
-        if r.status_code != 200:
-            logger.error(f"Failed to access ICON directory: {base_url}")
+        # Get latest available run
+        run_time = get_latest_gfs_run()
+        if run_time is None:
+            logger.error("No available GFS runs found in the last 3 days")
             return
-            
-        soup = BeautifulSoup(r.text, 'html.parser')
-        links = [a.get('href') for a in soup.find_all('a') if a.get('href').endswith('.bz2')]
         
-        # Time string in file pattern (model run time)
-        time_str = f"{run_date}{run_str}"
+        run_date = run_time.strftime("%Y%m%d")
+        run_str = run_time.strftime("%H")
+        logger.info(f"Using GFS {resolution}° run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
         
-        # Find available forecast hours
-        available_hours = set()
-        for link in links:
-            for fh in range(hours + 1):
-                if f"{fh:03d}" in link:
-                    available_hours.add(fh)
-        
-        if available_hours:
-            max_hour = min(max(available_hours), hours)
-            logger.info(f"Detected max available ICON forecast hour: {max_hour}")
-        else:
-            logger.warning(f"No ICON forecast hours found in directory listing, defaulting to {hours}")
+        # Check available forecast hours
+        try:
+            dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.{run_date}/{run_str}/atmos"
+            r = requests.get(dir_url, timeout=10)
+            if r.status_code == 200:
+                import re
+                pattern = re.compile(r"gfs\.t" + run_str + r"z\.pgrb2\.0p25\.f(\d{3})")
+                available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
+                if available_hours:
+                    max_hour = min(max(available_hours), hours)
+                    logger.info(f"Detected max available GFS forecast hour: {max_hour}")
+                else:
+                    logger.warning(f"No GFS forecast hours found in directory listing, defaulting to {hours}")
+                    max_hour = hours
+            else:
+                logger.warning(f"Could not access GFS directory listing (status {r.status_code}), defaulting to {hours}")
+                max_hour = hours
+        except Exception as e:
+            logger.warning(f"Error accessing GFS directory listing: {e}, defaulting to {hours}")
             max_hour = hours
         
-        # Download each file that matches our criteria
         for fh in range(0, max_hour+1, 1):  # hourly steps
-            for var in variables:
-                if var not in variable_map:
-                    continue
-                    
-                icon_var = variable_map[var]
-                
-                # Determine level based on variable
-                if var in ["u10", "v10"]:
-                    level = "L1"  # Surface level for winds
-                elif var == "t2m":
-                    level = "L1"  # Surface level for temperature
-                elif var == "prate":
-                    level = "L1"  # Surface level for precipitation
-                
-                # Find matching file pattern
-                pattern = file_pattern.format(param=icon_var, level=level, fh=fh, time_str=time_str)
-                matching_files = [link for link in links if pattern in link]
-                
-                if not matching_files:
-                    logger.warning(f"No matching ICON files found for {var} at hour {fh}")
-                    continue
-                
-                # Get the first matching file
-                file_url = f"{base_url}/{matching_files[0]}"
-                out_path = os.path.join(out_dir, f"icon_{resolution}_{run_date}_{run_str}_f{fh:03d}_{var}.grib2")
-                
-                logger.info(f"Downloading ICON {resolution} {var} forecast hour {fh}: {file_url}")
-                try:
-                    r = requests.get(file_url, timeout=30)
-                    if r.status_code == 200:
-                        # Decompress bz2 data and save
-                        decompressed = bz2.decompress(r.content)
-                        with open(out_path, "wb") as f:
-                            f.write(decompressed)
-                        logger.info(f"Saved {out_path}")
-                    else:
-                        logger.error(f"Failed to download ICON file: {file_url} (Status: {r.status_code})")
-                except Exception as e:
-                    logger.error(f"Error downloading/processing ICON file: {str(e)}")
-    
+            params = {
+                "file": config['file_pattern'].format(run_str=run_str, fh=fh),
+                "lev_2_m_above_ground": "on",
+                "lev_10_m_above_ground": "on",
+                "var_UGRD": "on" if "u10" in variables else "off",
+                "var_VGRD": "on" if "v10" in variables else "off",
+                "var_TMP": "on" if "t2m" in variables else "off",
+                "var_PRATE": "on" if "prate" in variables else "off",
+                "subregion": "",
+                "leftlon": lon_min,
+                "rightlon": lon_max,
+                "toplat": lat_max,
+                "bottomlat": lat_min,
+                "dir": config['dir_pattern'].format(date_str=run_date, run_str=run_str)
+            }
+            url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+            out_path = os.path.join(output_dir, f"gfs_{resolution}_{run_date}_{run_str}_f{fh:03d}.grib2")
+            logger.info(f"Downloading GFS {resolution}° forecast hour {fh}: {url} ...")
+            try:
+                r = requests.get(url, timeout=30)
+                if r.status_code == 200:
+                    with open(out_path, "wb") as f:
+                        f.write(r.content)
+                    logger.info(f"Saved {out_path}")
+                else:
+                    logger.error(f"Failed to download GFS {resolution}° forecast hour {fh}: {url} (Status code: {r.status_code})")
+            except Exception as e:
+                logger.error(f"Error downloading GFS {resolution}° forecast hour {fh}: {str(e)}")
     except Exception as e:
-        logger.error(f"Error accessing ICON directory: {str(e)}")
+        logger.error(f"Error downloading GFS data: {str(e)}")
 
-def download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="cmc_gribs", resolution='15km'):
-    os.makedirs(out_dir, exist_ok=True)
-    
-    # Get latest available run
-    run_time = get_latest_cmc_run()
-    if run_time is None:
-        logger.error("No available CMC runs found in the last 3 days")
-        return
-        
-    run_date = run_time.strftime("%Y%m%d")
-    run_str = run_time.strftime("%H")
-    logger.info(f"Using CMC run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
-    
-    # Variable mapping for CMC
-    variable_map = {
-        "u10": "UGRD_TGL_10m",
-        "v10": "VGRD_TGL_10m",
-        "t2m": "TMP_TGL_2m",
-        "prate": "APCP_SFC_0"  # Accumulated precipitation
-    }
-    
-    # Choose the correct base URL based on resolution
-    if resolution == '15km':
-        base_url = f"https://dd.weather.gc.ca/model_gem_regional/15km/grib2/{run_str}"
-    else:
-        base_url = f"https://dd.weather.gc.ca/model_gem_global/25km/grib2/{run_str}"
-    
-    # List the directory to see available files
+def download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gribs", resolution='13km'):
+    """
+    Download ICON GRIB files for the specified region and variables.
+    """
     try:
-        r = requests.get(base_url, timeout=10)
-        if r.status_code != 200:
-            logger.error(f"Failed to access CMC directory: {base_url}")
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(out_dir, "icon_gribs")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Get latest available run
+        run_time = get_latest_icon_run()
+        if run_time is None:
+            logger.error("No available ICON runs found in the last 3 days")
             return
-            
-        soup = BeautifulSoup(r.text, 'html.parser')
-        all_links = [a.get('href') for a in soup.find_all('a') if a.get('href', '').endswith('.grib2')]
         
-        # Find available forecast hours
-        available_hours = set()
-        for link in all_links:
-            for fh in range(hours + 1):
-                for pattern in [f"P{fh:03d}", f"{fh:03d}", f"P{fh:02d}", f"{fh:02d}"]:
-                    if pattern in link:
-                        available_hours.add(fh)
+        run_date = run_time.strftime("%Y%m%d")
+        run_str = run_time.strftime("%H")
+        logger.info(f"Using ICON run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
         
-        if available_hours:
-            max_hour = min(max(available_hours), hours)
-            logger.info(f"Detected max available CMC forecast hour: {max_hour}")
+        # Map our variable names to ICON variable names
+        variable_map = {
+            "u10": "U_10M",
+            "v10": "V_10M",
+            "t2m": "T_2M",
+            "prate": "TOT_PREC"  # Note: This is accumulated precipitation, not rate
+        }
+        
+        # Determine the correct base URL and patterns based on resolution
+        if resolution == '13km':
+            # Global model
+            base_url = f"https://opendata.dwd.de/weather/nwp/icon/grib/global/{run_date}{run_str}"
+            file_pattern = "icon_global_regular_0.25_{param}_{level}_{fh:03d}_{time_str}.grib2.bz2"
         else:
-            logger.warning(f"No CMC forecast hours found in directory listing, defaulting to {hours}")
-            max_hour = hours
+            # Europe model with 7km resolution
+            base_url = f"https://opendata.dwd.de/weather/nwp/icon-eu/grib/{run_date}{run_str}"
+            file_pattern = "icon-eu_europe_regular-lat-lon_{param}_{level}_{fh:03d}_{time_str}.grib2.bz2"
         
-        # Download each forecast hour
-        for fh in range(0, max_hour+1, 1):
-            # CMC files might use 3-hourly steps or pad forecast hours differently
-            # Try different formats like P000, P003, 000, etc.
-            for var in variables:
-                if var not in variable_map:
-                    continue
-                
-                cmc_var = variable_map[var]
-                # Try different forecast hour notations
-                fh_patterns = [f"P{fh:03d}", f"{fh:03d}", f"P{fh:02d}", f"{fh:02d}"]
-                
-                # Find any matching file for this variable and forecast hour
-                matching_files = []
-                for pattern in fh_patterns:
-                    matching_files.extend([link for link in all_links 
-                                          if cmc_var in link and pattern in link])
-                
-                if not matching_files:
-                    logger.warning(f"No matching CMC files found for {var} at hour {fh}")
-                    continue
-                
-                # Get the first matching file
-                file_url = f"{base_url}/{matching_files[0]}"
-                out_path = os.path.join(out_dir, f"cmc_{resolution}_{run_date}_{run_str}_f{fh:03d}_{var}.grib2")
-                
-                logger.info(f"Downloading CMC {resolution} {var} forecast hour {fh}: {file_url}")
-                try:
-                    r = requests.get(file_url, timeout=30)
-                    if r.status_code == 200:
-                        with open(out_path, "wb") as f:
-                            f.write(r.content)
-                        logger.info(f"Saved {out_path}")
-                    else:
-                        logger.error(f"Failed to download CMC file: {file_url} (Status: {r.status_code})")
-                except Exception as e:
-                    logger.error(f"Error downloading CMC file: {str(e)}")
-    
-    except Exception as e:
-        logger.error(f"Error accessing CMC directory: {str(e)}")
-
-def download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="hrrr_gribs", resolution='3km'):
-    os.makedirs(out_dir, exist_ok=True)
-    config = MODEL_RESOLUTIONS['hrrr'][resolution]
-    base_url = config['url']
-
-    # Get latest available run
-    run_time = get_latest_hrrr_run()
-    if run_time is None:
-        logger.error("No available HRRR runs found in the last 2 days")
-        return
-
-    run_date = run_time.strftime("%Y%m%d")
-    run_str = run_time.strftime("%H")
-    logger.info(f"Using HRRR {resolution} run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
-
-    # Detect max available forecast hour
-    hrrr_dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.{run_date}/conus/"
-    try:
-        r = requests.get(hrrr_dir_url, timeout=10)
-        if r.status_code == 200:
-            import re
-            pattern = re.compile(r"hrrr\.t" + run_str + r"z\.wrfsfcf(\d{2})\.grib2")
-            available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
+        # First, list the directory to find available files
+        try:
+            r = requests.get(base_url, timeout=10)
+            if r.status_code != 200:
+                logger.error(f"Failed to access ICON directory: {base_url}")
+                return
+            
+            soup = BeautifulSoup(r.text, 'html.parser')
+            links = [a.get('href') for a in soup.find_all('a') if a.get('href').endswith('.bz2')]
+            
+            # Time string in file pattern (model run time)
+            time_str = f"{run_date}{run_str}"
+            
+            # Find available forecast hours
+            available_hours = set()
+            for link in links:
+                for fh in range(hours + 1):
+                    if f"{fh:03d}" in link:
+                        available_hours.add(fh)
+            
             if available_hours:
                 max_hour = min(max(available_hours), hours)
-                logger.info(f"Detected max available HRRR forecast hour: {max_hour}")
+                logger.info(f"Detected max available ICON forecast hour: {max_hour}")
             else:
-                logger.warning(f"No HRRR forecast hours found in directory listing, defaulting to {hours}")
+                logger.warning(f"No ICON forecast hours found in directory listing, defaulting to {hours}")
                 max_hour = hours
-        else:
-            logger.warning(f"Could not access HRRR directory listing (status {r.status_code}), defaulting to {hours}")
-            max_hour = hours
-    except Exception as e:
-        logger.warning(f"Error accessing HRRR directory listing: {e}, defaulting to {hours}")
-        max_hour = hours
-
-    for fh in range(0, max_hour+1, 1):  # hourly steps
-        params = {
-            "file": config['file_pattern'].format(run_str=run_str, fh=fh),
-            "lev_2_m_above_ground": "on",
-            "lev_10_m_above_ground": "on",
-            "var_UGRD": "on" if "u10" in variables else "off",
-            "var_VGRD": "on" if "v10" in variables else "off",
-            "var_TMP": "on" if "t2m" in variables else "off",
-            "var_PRATE": "on" if "prate" in variables else "off",
-            "subregion": "",
-            "leftlon": lon_min,
-            "rightlon": lon_max,
-            "toplat": lat_max,
-            "bottomlat": lat_min,
-            "dir": f"/hrrr.{run_date}/conus"  # Fixed date format in directory path
-        }
-        url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
-        out_path = os.path.join(out_dir, f"hrrr_{resolution}_{run_date}_{run_str}_f{fh:02d}.grib2")
-        logger.info(f"Downloading HRRR {resolution} forecast hour {fh}: {url} ...")
-        try:
-            r = requests.get(url, timeout=30)
-            if r.status_code == 200:
-                with open(out_path, "wb") as f:
-                    f.write(r.content)
-                logger.info(f"Saved {out_path}")
-            else:
-                logger.error(f"Failed to download HRRR {resolution} forecast hour {fh}: {url} (Status code: {r.status_code})")
+            
+            # Download each file that matches our criteria
+            for fh in range(0, max_hour+1, 1):  # hourly steps
+                for var in variables:
+                    if var not in variable_map:
+                        continue
+                    
+                    icon_var = variable_map[var]
+                    
+                    # Determine level based on variable
+                    if var in ["u10", "v10"]:
+                        level = "L1"  # Surface level for winds
+                    elif var == "t2m":
+                        level = "L1"  # Surface level for temperature
+                    elif var == "prate":
+                        level = "L1"  # Surface level for precipitation
+                    
+                    # Find matching file pattern
+                    pattern = file_pattern.format(param=icon_var, level=level, fh=fh, time_str=time_str)
+                    matching_files = [link for link in links if pattern in link]
+                    
+                    if not matching_files:
+                        logger.warning(f"No matching ICON files found for {var} at hour {fh}")
+                        continue
+                    
+                    # Get the first matching file
+                    file_url = f"{base_url}/{matching_files[0]}"
+                    out_path = os.path.join(output_dir, f"icon_{resolution}_{run_date}_{run_str}_f{fh:03d}_{var}.grib2")
+                    
+                    logger.info(f"Downloading ICON {resolution} {var} forecast hour {fh}: {file_url}")
+                    try:
+                        r = requests.get(file_url, timeout=30)
+                        if r.status_code == 200:
+                            # Decompress bz2 data and save
+                            decompressed = bz2.decompress(r.content)
+                            with open(out_path, "wb") as f:
+                                f.write(decompressed)
+                            logger.info(f"Saved {out_path}")
+                        else:
+                            logger.error(f"Failed to download ICON file: {file_url} (Status: {r.status_code})")
+                    except Exception as e:
+                        logger.error(f"Error downloading/processing ICON file: {str(e)}")
+        
         except Exception as e:
-            logger.error(f"Error downloading HRRR {resolution} forecast hour {fh}: {str(e)}")
+            logger.error(f"Error accessing ICON directory: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error downloading ICON data: {str(e)}")
 
-def download_nam_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=84, out_dir="nam_gribs"):
+def download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gribs", resolution='15km'):
+    """
+    Download CMC GRIB files for the specified region and variables.
+    """
+    try:
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(out_dir, "cmc_gribs")
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Get latest available run
+        run_time = get_latest_cmc_run()
+        if run_time is None:
+            logger.error("No available CMC runs found in the last 3 days")
+            return
+        
+        run_date = run_time.strftime("%Y%m%d")
+        run_str = run_time.strftime("%H")
+        logger.info(f"Using CMC run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
+        
+        # Variable mapping for CMC
+        variable_map = {
+            "u10": "UGRD_TGL_10m",
+            "v10": "VGRD_TGL_10m",
+            "t2m": "TMP_TGL_2m",
+            "prate": "APCP_SFC_0"  # Accumulated precipitation
+        }
+        
+        # Choose the correct base URL based on resolution
+        if resolution == '15km':
+            base_url = f"https://dd.weather.gc.ca/model_gem_regional/15km/grib2/{run_str}"
+        else:
+            base_url = f"https://dd.weather.gc.ca/model_gem_global/25km/grib2/{run_str}"
+        
+        # List the directory to see available files
+        try:
+            r = requests.get(base_url, timeout=10)
+            if r.status_code != 200:
+                logger.error(f"Failed to access CMC directory: {base_url}")
+                return
+            
+            soup = BeautifulSoup(r.text, 'html.parser')
+            all_links = [a.get('href') for a in soup.find_all('a') if a.get('href', '').endswith('.grib2')]
+            
+            # Find available forecast hours
+            available_hours = set()
+            for link in all_links:
+                for fh in range(hours + 1):
+                    for pattern in [f"P{fh:03d}", f"{fh:03d}", f"P{fh:02d}", f"{fh:02d}"]:
+                        if pattern in link:
+                            available_hours.add(fh)
+            
+            if available_hours:
+                max_hour = min(max(available_hours), hours)
+                logger.info(f"Detected max available CMC forecast hour: {max_hour}")
+            else:
+                logger.warning(f"No CMC forecast hours found in directory listing, defaulting to {hours}")
+                max_hour = hours
+            
+            # Download each forecast hour
+            for fh in range(0, max_hour+1, 1):
+                # CMC files might use 3-hourly steps or pad forecast hours differently
+                # Try different formats like P000, P003, 000, etc.
+                for var in variables:
+                    if var not in variable_map:
+                        continue
+                    
+                    cmc_var = variable_map[var]
+                    # Try different forecast hour notations
+                    fh_patterns = [f"P{fh:03d}", f"{fh:03d}", f"P{fh:02d}", f"{fh:02d}"]
+                    
+                    # Find any matching file for this variable and forecast hour
+                    matching_files = []
+                    for pattern in fh_patterns:
+                        matching_files.extend([link for link in all_links 
+                                              if cmc_var in link and pattern in link])
+                    
+                    if not matching_files:
+                        logger.warning(f"No matching CMC files found for {var} at hour {fh}")
+                        continue
+                    
+                    # Get the first matching file
+                    file_url = f"{base_url}/{matching_files[0]}"
+                    out_path = os.path.join(output_dir, f"cmc_{resolution}_{run_date}_{run_str}_f{fh:03d}_{var}.grib2")
+                    
+                    logger.info(f"Downloading CMC {resolution} {var} forecast hour {fh}: {file_url}")
+                    try:
+                        r = requests.get(file_url, timeout=30)
+                        if r.status_code == 200:
+                            with open(out_path, "wb") as f:
+                                f.write(r.content)
+                            logger.info(f"Saved {out_path}")
+                        else:
+                            logger.error(f"Failed to download CMC file: {file_url} (Status: {r.status_code})")
+                    except Exception as e:
+                        logger.error(f"Error downloading CMC file: {str(e)}")
+        
+        except Exception as e:
+            logger.error(f"Error accessing CMC directory: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error downloading CMC data: {str(e)}")
+
+def download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=18, out_dir="gribs", resolution='3km'):
+    """
+    Download HRRR GRIB files for the specified region and variables.
+    """
+    try:
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(out_dir, "hrrr_gribs")
+        os.makedirs(output_dir, exist_ok=True)
+        config = MODEL_RESOLUTIONS['hrrr'][resolution]
+        base_url = config['url']
+
+        # Get latest available run
+        run_time = get_latest_hrrr_run()
+        if run_time is None:
+            logger.error("No available HRRR runs found in the last 2 days")
+            return
+
+        run_date = run_time.strftime("%Y%m%d")
+        run_str = run_time.strftime("%H")
+        logger.info(f"Using HRRR {resolution} run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
+
+        # Detect max available forecast hour
+        hrrr_dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.{run_date}/conus/"
+        try:
+            r = requests.get(hrrr_dir_url, timeout=10)
+            if r.status_code == 200:
+                import re
+                pattern = re.compile(r"hrrr\.t" + run_str + r"z\.wrfsfcf(\d{2})\.grib2")
+                available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
+                if available_hours:
+                    max_hour = min(max(available_hours), hours)
+                    logger.info(f"Detected max available HRRR forecast hour: {max_hour}")
+                else:
+                    logger.warning(f"No HRRR forecast hours found in directory listing, defaulting to {hours}")
+                    max_hour = hours
+            else:
+                logger.warning(f"Could not access HRRR directory listing (status {r.status_code}), defaulting to {hours}")
+                max_hour = hours
+        except Exception as e:
+            logger.warning(f"Error accessing HRRR directory listing: {e}, defaulting to {hours}")
+            max_hour = hours
+
+        for fh in range(0, max_hour+1, 1):  # hourly steps
+            params = {
+                "file": config['file_pattern'].format(run_str=run_str, fh=fh),
+                "lev_2_m_above_ground": "on",
+                "lev_10_m_above_ground": "on",
+                "var_UGRD": "on" if "u10" in variables else "off",
+                "var_VGRD": "on" if "v10" in variables else "off",
+                "var_TMP": "on" if "t2m" in variables else "off",
+                "var_PRATE": "on" if "prate" in variables else "off",
+                "subregion": "",
+                "leftlon": lon_min,
+                "rightlon": lon_max,
+                "toplat": lat_max,
+                "bottomlat": lat_min,
+                "dir": f"/hrrr.{run_date}/conus"  # Fixed date format in directory path
+            }
+            url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+            out_path = os.path.join(output_dir, f"hrrr_{resolution}_{run_date}_{run_str}_f{fh:02d}.grib2")
+            logger.info(f"Downloading HRRR {resolution} forecast hour {fh}: {url} ...")
+            try:
+                r = requests.get(url, timeout=30)
+                if r.status_code == 200:
+                    with open(out_path, "wb") as f:
+                        f.write(r.content)
+                    logger.info(f"Saved {out_path}")
+                else:
+                    logger.error(f"Failed to download HRRR {resolution} forecast hour {fh}: {url} (Status code: {r.status_code})")
+            except Exception as e:
+                logger.error(f"Error downloading HRRR {resolution} forecast hour {fh}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error downloading HRRR data: {str(e)}")
+
+def download_nam_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=84, out_dir="gribs"):
     os.makedirs(out_dir, exist_ok=True)
     base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_nam.pl"
     
@@ -686,7 +718,7 @@ def download_nam_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=84, 
         except Exception as e:
             print(f"Error downloading NAM forecast hour {fh}: {str(e)}")
 
-def download_rap_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=18, out_dir="rap_gribs"):
+def download_rap_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=18, out_dir="gribs"):
     os.makedirs(out_dir, exist_ok=True)
     base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_rap.pl"
     
@@ -731,7 +763,7 @@ def download_rap_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=18, 
         except Exception as e:
             print(f"Error downloading RAP forecast hour {fh}: {str(e)}")
 
-def download_nbm_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="nbm_gribs"):
+def download_nbm_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gribs"):
     os.makedirs(out_dir, exist_ok=True)
     base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_nbm.pl"
     

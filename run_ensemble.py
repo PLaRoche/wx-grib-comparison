@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_ensemble_analysis(skip_download=False):
+def run_ensemble_analysis(skip_download=False, hours=72):
     """
     Main function to run the ensemble analysis workflow.
     """
@@ -33,13 +33,11 @@ def run_ensemble_analysis(skip_download=False):
         lon_min, lon_max = -63.6, -63.4
         variables = ["u10", "v10", "t2m", "prate"]
         
-        # HRRR is available up to 18 hours ahead
-        hrrr_hours = 18
-        # GFS is available up to 384 hours ahead (but let's use 72 for speed)
-        gfs_hours = 72
-        # ICON and CMC are also available up to 72 hours ahead
-        icon_hours = 72
-        cmc_hours = 72
+        # Set forecast hours for each model
+        hrrr_hours = min(18, hours)  # HRRR is available up to 18 hours ahead
+        gfs_hours = min(72, hours)   # GFS is available up to 384 hours ahead (but let's use 72 for speed)
+        icon_hours = min(72, hours)  # ICON is available up to 72 hours ahead
+        cmc_hours = min(72, hours)   # CMC is available up to 72 hours ahead
         
         # Create output directory if it doesn't exist
         output_dir = "ensemble_output"
@@ -66,22 +64,22 @@ def run_ensemble_analysis(skip_download=False):
         
         # Process HRRR data
         logger.info("Processing HRRR data...")
-        hrrr_files = [os.path.join("hrrr_gribs", f) for f in os.listdir("hrrr_gribs") if f.endswith(".grib2")]
+        hrrr_files = [os.path.join("gribs", "hrrr_gribs", f) for f in os.listdir("gribs/hrrr_gribs") if f.endswith(".grib2")]
         hrrr_data = process_hrrr_data(hrrr_files)
         
         # Process GFS data
         logger.info("Processing GFS data...")
-        gfs_files = [os.path.join("gfs_gribs", f) for f in os.listdir("gfs_gribs") if f.endswith(".grib2")]
+        gfs_files = [os.path.join("gribs", "gfs_gribs", f) for f in os.listdir("gribs/gfs_gribs") if f.endswith(".grib2")]
         gfs_data = process_gfs_data(gfs_files)
         
         # Process ICON data
         logger.info("Processing ICON data...")
-        icon_files = [os.path.join("icon_gribs", f) for f in os.listdir("icon_gribs") if f.endswith(".grib2")]
+        icon_files = [os.path.join("gribs", "icon_gribs", f) for f in os.listdir("gribs/icon_gribs") if f.endswith(".grib2")]
         icon_data = process_icon_data(icon_files)
         
         # Process CMC data
         logger.info("Processing CMC data...")
-        cmc_files = [os.path.join("cmc_gribs", f) for f in os.listdir("cmc_gribs") if f.endswith(".grib2")]
+        cmc_files = [os.path.join("gribs", "cmc_gribs", f) for f in os.listdir("gribs/cmc_gribs") if f.endswith(".grib2")]
         cmc_data = process_cmc_data(cmc_files)
         
         # Combine data
@@ -104,5 +102,6 @@ def run_ensemble_analysis(skip_download=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run ensemble analysis workflow.")
     parser.add_argument('--skip-download', action='store_true', help='Skip the download step and only process and visualize existing data')
+    parser.add_argument('--hours', type=int, default=72, help='Number of hours of weather data to download (default: 72)')
     args = parser.parse_args()
-    run_ensemble_analysis(skip_download=args.skip_download) 
+    run_ensemble_analysis(skip_download=args.skip_download, hours=args.hours) 
