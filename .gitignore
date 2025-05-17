@@ -35,4 +35,12 @@ hrrr_gribs/
 
 # OS
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Project specific
+ensemble_output/
+*.grib2
+
+# Virtual environments
+venv/
+.env/ 
