@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
-from download_ensemble import download_hrrr_gribs, download_gfs_gribs
-from process_ensemble import process_hrrr_data, process_gfs_data
+from download_ensemble import download_hrrr_gribs, download_gfs_gribs, download_icon_gribs, download_cmc_gribs
+from process_ensemble import process_hrrr_data, process_gfs_data, process_icon_data, process_cmc_data
 from analyze_ensemble import analyze_ensemble_data
 from visualize_ensemble import create_ensemble_visualization
 
@@ -36,6 +36,9 @@ def run_ensemble_analysis():
         hrrr_hours = 18
         # GFS is available up to 384 hours ahead (but let's use 72 for speed)
         gfs_hours = 72
+        # ICON and CMC are also available up to 72 hours ahead
+        icon_hours = 72
+        cmc_hours = 72
         
         # Create output directory if it doesn't exist
         output_dir = "ensemble_output"
@@ -49,6 +52,14 @@ def run_ensemble_analysis():
         logger.info("Downloading GFS data...")
         download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=gfs_hours)
         
+        # Download ICON data
+        logger.info("Downloading ICON data...")
+        download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=icon_hours)
+        
+        # Download CMC data
+        logger.info("Downloading CMC data...")
+        download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=cmc_hours)
+        
         # Process HRRR data
         logger.info("Processing HRRR data...")
         hrrr_files = [os.path.join("hrrr_gribs", f) for f in os.listdir("hrrr_gribs") if f.endswith(".grib2")]
@@ -59,8 +70,18 @@ def run_ensemble_analysis():
         gfs_files = [os.path.join("gfs_gribs", f) for f in os.listdir("gfs_gribs") if f.endswith(".grib2")]
         gfs_data = process_gfs_data(gfs_files)
         
+        # Process ICON data
+        logger.info("Processing ICON data...")
+        icon_files = [os.path.join("icon_gribs", f) for f in os.listdir("icon_gribs") if f.endswith(".grib2")]
+        icon_data = process_icon_data(icon_files)
+        
+        # Process CMC data
+        logger.info("Processing CMC data...")
+        cmc_files = [os.path.join("cmc_gribs", f) for f in os.listdir("cmc_gribs") if f.endswith(".grib2")]
+        cmc_data = process_cmc_data(cmc_files)
+        
         # Combine data
-        ensemble_data = pd.concat([hrrr_data, gfs_data], axis=0)
+        ensemble_data = pd.concat([hrrr_data, gfs_data, icon_data, cmc_data], axis=0)
         
         # Analyze ensemble data
         logger.info("Analyzing ensemble data...")
