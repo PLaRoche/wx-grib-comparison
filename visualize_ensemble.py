@@ -105,7 +105,7 @@ def create_ensemble_visualization(analysis_results, output_dir):
                         all_data.extend(model_data[variable].values)
                         forecast_hours.extend(model_data['forecast_hour'].values)
                     
-                    # Create a single violin plot for all data
+                    # Create a single violin plot for all data, grouped by individual forecast hours
                     data_by_hour = []
                     positions = []
                     for hour in sorted(model_agreement['forecast_hour'].unique()):
@@ -121,18 +121,17 @@ def create_ensemble_visualization(analysis_results, output_dir):
                             showmeans=True,
                             showextrema=True
                         )
-                        
                         # Set color for the violin plot
                         for pc in parts['bodies']:
                             pc.set_facecolor('lightblue')
                             pc.set_alpha(0.7)
                     
-                    # Add mean line for all data points
+                    # Add mean line for all data points (by forecast hour)
                     mean_by_hour = model_agreement.groupby('forecast_hour')[variable].mean()
                     ax1.plot(mean_by_hour.index, mean_by_hour.values, 
                             color='blue', linestyle='--', alpha=0.7, label='Ensemble Mean')
                     
-                    # Add individual data points
+                    # Add individual data points for hours with only one value
                     for hour in sorted(model_agreement['forecast_hour'].unique()):
                         hour_data = model_agreement[model_agreement['forecast_hour'] == hour][variable].values
                         if len(hour_data) == 1:  # Plot single points as scatter
@@ -147,10 +146,10 @@ def create_ensemble_visualization(analysis_results, output_dir):
                     
                     # Format x-axis to show every 6 hours with date
                     x_dates = [current_time + timedelta(hours=int(h)) for h in sorted(model_agreement['forecast_hour'].unique())]
-                    ax1.set_xticks(range(len(x_dates)))
+                    ax1.set_xticks(positions)
                     ax1.set_xticklabels([d.strftime('%m/%d %H') for d in x_dates], rotation=45)
                     
-                    # Plot 2: Line plot for comparison
+                    # Plot 2: Line plot for comparison (still by forecast_hour for each model)
                     model_list = list(model_agreement['model'].unique())
                     colors = sns.color_palette("husl", len(model_list))
                     color_dict = dict(zip(model_list, colors))  # Create color mapping dictionary

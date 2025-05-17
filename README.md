@@ -1,102 +1,114 @@
 # Weather GRIB Comparison Tool
 
-A Python tool for downloading and comparing weather forecasts from multiple models (currently GFS and HRRR) for a specific region.
+A Python application for downloading and comparing weather forecasts from multiple models (GFS, HRRR, ICON, CMC, NAM, RAP, NBM) for a specific region.
 
 ## Features
 
-- Downloads GRIB2 forecast data from multiple weather models:
+- Download GRIB2 forecast data from multiple weather models:
   - GFS (Global Forecast System)
   - HRRR (High-Resolution Rapid Refresh)
-  - (Framework in place for ICON and CMC, but not currently active)
-- Processes and analyzes temperature, precipitation, and wind data
-- Generates comparative plots showing forecasts from all models
-- Focuses on Halifax Harbour region (customizable)
-- Robust variable extraction from GRIB files (handles different variable names and levels)
-- Improved error handling for missing or ambiguous GRIB variables
+  - ICON (Icosahedral Nonhydrostatic)
+  - CMC (Canadian Meteorological Centre)
+  - NAM (North American Mesoscale)
+  - RAP (Rapid Refresh)
+  - NBM (National Blend of Models)
+- Process and analyze data from all models
+- Generate comparative plots
+- Parallel downloads with progress tracking
+- Automatic retry logic for failed downloads
+- Support for different model resolutions
 
 ## Requirements
 
-- Python 3.9+
-- Required packages:
+- Python 3.6+
+- Required Python packages (install via `pip install -r requirements.txt`):
   - xarray
   - cfgrib
   - pandas
   - matplotlib
-  - seaborn
-  - requests
   - numpy
+  - requests
+  - beautifulsoup4
+  - tqdm
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone git@github.com:PLaRoche/wx-grib-comparison.git
-cd wx-grib-comparison
+git clone <repository-url>
+cd ensemble-analysis
 ```
 
-2. Create and activate a virtual environment (recommended):
+2. Install required packages:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m pip install -r requirements.txt
 ```
 
-3. Install dependencies:
+## Usage
+
+Run the main script with your desired parameters:
+
 ```bash
-pip install -r requirements.txt
+python3 run_ensemble.py --lat-min 44.5 --lat-max 44.8 --lon-min -63.6 --lon-max -63.4 --hours 72
 ```
+
+### Command-line Arguments
+
+- `--lat-min`: Minimum latitude (default: 44.5)
+- `--lat-max`: Maximum latitude (default: 44.8)
+- `--lon-min`: Minimum longitude (default: -63.6)
+- `--lon-max`: Maximum longitude (default: -63.4)
+- `--hours`: Number of hours of weather data to download (default: 72)
+- `--skip-download`: Skip downloading and use existing GRIB files
+- `--skip-process`: Skip processing and use existing processed data
+- `--skip-analyze`: Skip analysis and use existing analysis results
+- `--skip-plot`: Skip plotting and use existing plots
+
+### Model Resolutions
+
+The tool supports different resolutions for each model:
+
+- GFS: 0.25°, 0.5°, or 1.0°
+- HRRR: 3km or 13km
+- ICON: 13km or 7km
+- CMC: 25km or 15km
+
+### Download Features
+
+- **Parallel Downloads**: Files are downloaded concurrently (default: 5 parallel downloads)
+- **Progress Tracking**: Visual progress bars for each model's downloads
+- **Retry Logic**: Automatic retries with exponential backoff for failed downloads
+- **Compression Support**: Handles both regular and bz2 compressed files
 
 ## Project Structure
 
-- `run_ensemble.py`: Main script that combines download, processing, analysis, and visualization
-- `download_ensemble.py`: Functions for downloading GRIB2 data from different models
-- `process_ensemble.py`: Functions for processing GRIB2 files into DataFrames
-- `analyze_ensemble.py`: Functions for analyzing the processed data
-- `visualize_ensemble.py`: Functions for generating plots and visualizations
-
-Directory Structure:
 ```
-.
-├── gribs/                    # Main directory for all GRIB files
+ensemble-analysis/
+├── gribs/                    # Downloaded GRIB files
 │   ├── gfs_gribs/           # GFS model files
 │   ├── hrrr_gribs/          # HRRR model files
 │   ├── icon_gribs/          # ICON model files
 │   ├── cmc_gribs/           # CMC model files
 │   ├── nam_gribs/           # NAM model files
-│   ├── nbm_gribs/           # NBM model files
-│   └── rap_gribs/           # RAP model files
-├── ensemble_output/         # Output directory for analysis and plots
-└── ...                     # Other project files
+│   ├── rap_gribs/           # RAP model files
+│   └── nbm_gribs/           # NBM model files
+├── ensemble_output/         # Analysis and visualization output
+├── run_ensemble.py          # Main script
+├── download_ensemble.py     # Download functions
+├── process_ensemble.py      # Data processing
+├── analyze_ensemble.py      # Analysis functions
+├── visualize_ensemble.py    # Visualization code
+└── requirements.txt         # Python dependencies
 ```
-
-## Usage
-
-1. Configure your analysis parameters in `run_ensemble.py`:
-   - Set your location coordinates
-   - Define forecast variables
-   - Specify time ranges
-   - Configure visualization options
-
-2. Run the analysis:
-```bash
-python3 run_ensemble.py [--skip-download] [--hours HOURS]
-```
-
-Arguments:
-- `--skip-download`: Optional. Skip downloading new forecast data and use existing files in the data directory.
-- `--hours`: Optional. Number of hours of weather data to download (default: 72).
-
-This will:
-1. Download forecast data from all configured models (unless --skip-download is specified)
-2. Process the GRIB2 files
-3. Analyze and generate plots showing the forecasts
 
 ## Notes
 
-- The code is currently set up for the Halifax Harbour region, but you can change the latitude/longitude bounds in `run_ensemble.py`.
-- All models (GFS, HRRR, ICON, CMC, NAM, NBM, RAP) are supported and will be downloaded and processed.
-- The code robustly handles variable extraction and missing data in GRIB files, making it more reliable for operational use.
-- The `--hours` argument allows you to customize the forecast window (default is 72 hours).
+- All models are downloaded by default
+- The `--hours` argument controls how many hours of forecast data to download
+- Files are downloaded in parallel with progress tracking
+- Failed downloads are automatically retried with exponential backoff
+- The tool supports both regular and compressed (bz2) GRIB files
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License - see the LICENSE file for details. 
