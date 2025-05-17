@@ -140,12 +140,15 @@ def create_ensemble_visualization(analysis_results, output_dir):
                     
                     # Customize violin plot
                     ax1.set_title(f'{variable.title()} Ensemble Distribution')
-                    ax1.set_xlabel('Forecast Hour')
+                    ax1.set_xlabel('Time (UTC)')
                     ax1.set_ylabel(variable.title())
                     ax1.grid(True)
                     ax1.legend()
-                    # Show per-hour x-axis
-                    ax1.set_xticks(sorted(model_agreement['forecast_hour'].unique()))
+                    
+                    # Format x-axis to show every 6 hours with date
+                    x_dates = [current_time + timedelta(hours=int(h)) for h in sorted(model_agreement['forecast_hour'].unique())]
+                    ax1.set_xticks(range(len(x_dates)))
+                    ax1.set_xticklabels([d.strftime('%m/%d %H') for d in x_dates], rotation=45)
                     
                     # Plot 2: Line plot for comparison
                     model_list = list(model_agreement['model'].unique())
