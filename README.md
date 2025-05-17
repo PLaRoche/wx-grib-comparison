@@ -34,20 +34,35 @@ git clone git@github.com:PLaRoche/wx-grib-comparison.git
 cd wx-grib-comparison
 ```
 
-2. Install required packages:
+2. Create and activate a virtual environment (recommended):
 ```bash
-pip3 install xarray cfgrib pandas matplotlib seaborn requests numpy
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-Run the complete analysis with a single command:
+1. Configure your analysis parameters in `run_ensemble.py`:
+   - Set your location coordinates
+   - Define forecast variables
+   - Specify time ranges
+   - Configure visualization options
+
+2. Run the analysis:
 ```bash
-python3 run_ensemble.py
+python3 run_ensemble.py [--skip-download]
 ```
 
+Arguments:
+- `--skip-download`: Optional. Skip downloading new forecast data and use existing files in the data directory.
+
 This will:
-1. Download forecast data from GFS and HRRR
+1. Download forecast data from GFS and HRRR (unless --skip-download is specified)
 2. Process the GRIB2 files
 3. Analyze and generate plots showing the forecasts
 
