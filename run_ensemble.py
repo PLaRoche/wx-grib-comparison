@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import argparse
 from download_ensemble import download_hrrr_gribs, download_gfs_gribs, download_icon_gribs, download_cmc_gribs
 from process_ensemble import process_hrrr_data, process_gfs_data, process_icon_data, process_cmc_data
 from analyze_ensemble import analyze_ensemble_data
@@ -16,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def run_ensemble_analysis():
+def run_ensemble_analysis(skip_download=False):
     """
     Main function to run the ensemble analysis workflow.
     """
@@ -44,21 +45,24 @@ def run_ensemble_analysis():
         output_dir = "ensemble_output"
         os.makedirs(output_dir, exist_ok=True)
         
-        # Download HRRR data
-        logger.info("Downloading HRRR data...")
-        download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=hrrr_hours)
-        
-        # Download GFS data
-        logger.info("Downloading GFS data...")
-        download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=gfs_hours)
-        
-        # Download ICON data
-        logger.info("Downloading ICON data...")
-        download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=icon_hours)
-        
-        # Download CMC data
-        logger.info("Downloading CMC data...")
-        download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=cmc_hours)
+        if not skip_download:
+            # Download HRRR data
+            logger.info("Downloading HRRR data...")
+            download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=hrrr_hours)
+            
+            # Download GFS data
+            logger.info("Downloading GFS data...")
+            download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=gfs_hours)
+            
+            # Download ICON data
+            logger.info("Downloading ICON data...")
+            download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=icon_hours)
+            
+            # Download CMC data
+            logger.info("Downloading CMC data...")
+            download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=cmc_hours)
+        else:
+            logger.info("Skipping download step as requested.")
         
         # Process HRRR data
         logger.info("Processing HRRR data...")
@@ -98,4 +102,7 @@ def run_ensemble_analysis():
         raise
 
 if __name__ == "__main__":
-    run_ensemble_analysis() 
+    parser = argparse.ArgumentParser(description="Run ensemble analysis workflow.")
+    parser.add_argument('--skip-download', action='store_true', help='Skip the download step and only process and visualize existing data')
+    args = parser.parse_args()
+    run_ensemble_analysis(skip_download=args.skip_download) 

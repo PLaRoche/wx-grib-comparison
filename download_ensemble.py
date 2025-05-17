@@ -228,7 +228,28 @@ def download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, 
     run_str = run_time.strftime("%H")
     logger.info(f"Using GFS {resolution}° run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
     
-    for fh in range(0, hours+1, 1):  # hourly steps
+    # Check available forecast hours
+    try:
+        dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/gfs/prod/gfs.{run_date}/{run_str}/atmos"
+        r = requests.get(dir_url, timeout=10)
+        if r.status_code == 200:
+            import re
+            pattern = re.compile(r"gfs\.t" + run_str + r"z\.pgrb2\.0p25\.f(\d{3})")
+            available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
+            if available_hours:
+                max_hour = min(max(available_hours), hours)
+                logger.info(f"Detected max available GFS forecast hour: {max_hour}")
+            else:
+                logger.warning(f"No GFS forecast hours found in directory listing, defaulting to {hours}")
+                max_hour = hours
+        else:
+            logger.warning(f"Could not access GFS directory listing (status {r.status_code}), defaulting to {hours}")
+            max_hour = hours
+    except Exception as e:
+        logger.warning(f"Error accessing GFS directory listing: {e}, defaulting to {hours}")
+        max_hour = hours
+    
+    for fh in range(0, max_hour+1, 1):  # hourly steps
         params = {
             "file": config['file_pattern'].format(run_str=run_str, fh=fh),
             "lev_2_m_above_ground": "on",
@@ -302,8 +323,22 @@ def download_icon_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72,
         # Time string in file pattern (model run time)
         time_str = f"{run_date}{run_str}"
         
+        # Find available forecast hours
+        available_hours = set()
+        for link in links:
+            for fh in range(hours + 1):
+                if f"{fh:03d}" in link:
+                    available_hours.add(fh)
+        
+        if available_hours:
+            max_hour = min(max(available_hours), hours)
+            logger.info(f"Detected max available ICON forecast hour: {max_hour}")
+        else:
+            logger.warning(f"No ICON forecast hours found in directory listing, defaulting to {hours}")
+            max_hour = hours
+        
         # Download each file that matches our criteria
-        for fh in range(0, hours+1, 1):  # hourly steps
+        for fh in range(0, max_hour+1, 1):  # hourly steps
             for var in variables:
                 if var not in variable_map:
                     continue
@@ -384,8 +419,23 @@ def download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, 
         soup = BeautifulSoup(r.text, 'html.parser')
         all_links = [a.get('href') for a in soup.find_all('a') if a.get('href', '').endswith('.grib2')]
         
+        # Find available forecast hours
+        available_hours = set()
+        for link in all_links:
+            for fh in range(hours + 1):
+                for pattern in [f"P{fh:03d}", f"{fh:03d}", f"P{fh:02d}", f"{fh:02d}"]:
+                    if pattern in link:
+                        available_hours.add(fh)
+        
+        if available_hours:
+            max_hour = min(max(available_hours), hours)
+            logger.info(f"Detected max available CMC forecast hour: {max_hour}")
+        else:
+            logger.warning(f"No CMC forecast hours found in directory listing, defaulting to {hours}")
+            max_hour = hours
+        
         # Download each forecast hour
-        for fh in range(0, hours+1, 1):
+        for fh in range(0, max_hour+1, 1):
             # CMC files might use 3-hourly steps or pad forecast hours differently
             # Try different formats like P000, P003, 000, etc.
             for var in variables:
@@ -440,18 +490,16 @@ def download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72,
     run_str = run_time.strftime("%H")
     logger.info(f"Using HRRR {resolution} run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
 
-    # --- NEW: Detect max available forecast hour ---
-    # The HRRR directory for this run
+    # Detect max available forecast hour
     hrrr_dir_url = f"https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod/hrrr.{run_date}/conus/"
     try:
         r = requests.get(hrrr_dir_url, timeout=10)
         if r.status_code == 200:
-            # Find all forecast hour files for this run
             import re
             pattern = re.compile(r"hrrr\.t" + run_str + r"z\.wrfsfcf(\d{2})\.grib2")
             available_hours = [int(m.group(1)) for m in pattern.finditer(r.text)]
             if available_hours:
-                max_hour = max(available_hours)
+                max_hour = min(max(available_hours), hours)
                 logger.info(f"Detected max available HRRR forecast hour: {max_hour}")
             else:
                 logger.warning(f"No HRRR forecast hours found in directory listing, defaulting to {hours}")
@@ -462,7 +510,6 @@ def download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72,
     except Exception as e:
         logger.warning(f"Error accessing HRRR directory listing: {e}, defaulting to {hours}")
         max_hour = hours
-    # --- END NEW ---
 
     for fh in range(0, max_hour+1, 1):  # hourly steps
         params = {

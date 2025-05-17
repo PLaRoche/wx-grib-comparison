@@ -52,22 +52,36 @@ def process_hrrr_data(hrrr_files):
             if np.isscalar(valid_time):
                 valid_time = np.array([valid_time])
             valid_time = pd.to_datetime(valid_time)
+            
+            # Extract forecast hour from filename
+            import re
+            match = re.search(r'f(\d{2})\.grib2$', file)
+            if match:
+                forecast_hour = int(match.group(1))
+            else:
+                logger.warning(f"Could not extract forecast hour from filename: {file}")
+                continue
+            
             # Extract variables
             u10 = _extract_var(ds_wind, ['u10', 'UGRD', 'UGRD_10m'], valid_time)
             v10 = _extract_var(ds_wind, ['v10', 'VGRD', 'VGRD_10m'], valid_time)
             t2m = _extract_var(ds_temp, ['t2m', 'TMP', '2t', 'TMP_2m'], valid_time)
             prate = _extract_var(ds_prate, ['prate', 'PRATE'], valid_time)
+            
             # Calculate wind speed and direction
             wind_speed = np.sqrt(u10**2 + v10**2)
             wind_direction = (np.arctan2(u10, v10) * 180 / np.pi) % 360
+            
             # Convert temperature from Kelvin to Celsius
             temperature = t2m - 273.15
+            
             # Convert precipitation to mm/hour
             precipitation = prate * 3600
+            
             for j, vt in enumerate(valid_time):
                 data.append({
                     'timestamp': vt,
-                    'forecast_hour': (vt - valid_time[0]).total_seconds() / 3600,
+                    'forecast_hour': forecast_hour,
                     'temperature': float(temperature[j]) if j < len(temperature) else np.nan,
                     'wind_speed': float(wind_speed[j]) if j < len(wind_speed) else np.nan,
                     'wind_direction': float(wind_direction[j]) if j < len(wind_direction) else np.nan,
@@ -101,6 +115,16 @@ def process_gfs_data(gfs_files):
             if np.isscalar(valid_time):
                 valid_time = np.array([valid_time])
             valid_time = pd.to_datetime(valid_time)
+            
+            # Extract forecast hour from filename
+            import re
+            match = re.search(r'f(\d{3})\.grib2$', file)
+            if match:
+                forecast_hour = int(match.group(1))
+            else:
+                logger.warning(f"Could not extract forecast hour from filename: {file}")
+                continue
+            
             u10 = _extract_var(ds_wind, ['u10', 'UGRD', 'UGRD_10m'], valid_time)
             v10 = _extract_var(ds_wind, ['v10', 'VGRD', 'VGRD_10m'], valid_time)
             t2m = _extract_var(ds_temp, ['t2m', 'TMP', '2t', 'TMP_2m'], valid_time)
@@ -112,7 +136,7 @@ def process_gfs_data(gfs_files):
             for j, vt in enumerate(valid_time):
                 data.append({
                     'timestamp': vt,
-                    'forecast_hour': (vt - valid_time[0]).total_seconds() / 3600,
+                    'forecast_hour': forecast_hour,
                     'temperature': float(temperature[j]) if j < len(temperature) else np.nan,
                     'wind_speed': float(wind_speed[j]) if j < len(wind_speed) else np.nan,
                     'wind_direction': float(wind_direction[j]) if j < len(wind_direction) else np.nan,
@@ -146,6 +170,16 @@ def process_icon_data(icon_files):
             if np.isscalar(valid_time):
                 valid_time = np.array([valid_time])
             valid_time = pd.to_datetime(valid_time)
+            
+            # Extract forecast hour from filename
+            import re
+            match = re.search(r'_(\d{3})_', file)
+            if match:
+                forecast_hour = int(match.group(1))
+            else:
+                logger.warning(f"Could not extract forecast hour from filename: {file}")
+                continue
+            
             u10 = _extract_var(ds_wind, ['u10', 'U_10M'], valid_time)
             v10 = _extract_var(ds_wind, ['v10', 'V_10M'], valid_time)
             t2m = _extract_var(ds_temp, ['t2m', 'T_2M'], valid_time)
@@ -157,7 +191,7 @@ def process_icon_data(icon_files):
             for j, vt in enumerate(valid_time):
                 data.append({
                     'timestamp': vt,
-                    'forecast_hour': (vt - valid_time[0]).total_seconds() / 3600,
+                    'forecast_hour': forecast_hour,
                     'temperature': float(temperature[j]) if j < len(temperature) else np.nan,
                     'wind_speed': float(wind_speed[j]) if j < len(wind_speed) else np.nan,
                     'wind_direction': float(wind_direction[j]) if j < len(wind_direction) else np.nan,
@@ -191,6 +225,16 @@ def process_cmc_data(cmc_files):
             if np.isscalar(valid_time):
                 valid_time = np.array([valid_time])
             valid_time = pd.to_datetime(valid_time)
+            
+            # Extract forecast hour from filename
+            import re
+            match = re.search(r'f(\d{3})_', file)
+            if match:
+                forecast_hour = int(match.group(1))
+            else:
+                logger.warning(f"Could not extract forecast hour from filename: {file}")
+                continue
+            
             u10 = _extract_var(ds_wind, ['u10', 'UGRD_TGL_10m'], valid_time)
             v10 = _extract_var(ds_wind, ['v10', 'VGRD_TGL_10m'], valid_time)
             t2m = _extract_var(ds_temp, ['t2m', 'TMP_TGL_2m'], valid_time)
@@ -202,7 +246,7 @@ def process_cmc_data(cmc_files):
             for j, vt in enumerate(valid_time):
                 data.append({
                     'timestamp': vt,
-                    'forecast_hour': (vt - valid_time[0]).total_seconds() / 3600,
+                    'forecast_hour': forecast_hour,
                     'temperature': float(temperature[j]) if j < len(temperature) else np.nan,
                     'wind_speed': float(wind_speed[j]) if j < len(wind_speed) else np.nan,
                     'wind_direction': float(wind_direction[j]) if j < len(wind_direction) else np.nan,
