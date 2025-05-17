@@ -213,6 +213,106 @@ def get_latest_hrrr_run():
     logger.warning("No available HRRR runs found in the last 2 days")
     return None
 
+def get_latest_nam_run():
+    """Find the latest available NAM run"""
+    base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/nam/prod"
+    now = datetime.utcnow()
+    
+    # Try the last 3 days
+    for days_back in range(3):
+        date = now - timedelta(days=days_back)
+        date_str = date.strftime("%Y%m%d")
+        
+        # Try each run hour (00, 06, 12, 18)
+        for hour in [18, 12, 6, 0]:
+            run_str = f"{hour:02d}"
+            url = f"{base_url}/nam.{date_str}"
+            try:
+                r = requests.get(url, timeout=10)
+                if r.status_code == 200:
+                    # Check if the run files exist
+                    test_file = f"nam.t{run_str}z.awphys000.tm00.grib2"
+                    if test_file in r.text:
+                        return date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            except Exception as e:
+                print(f"Error checking NAM run: {str(e)}")
+    return None
+
+def get_latest_rap_run():
+    """Find the latest available RAP run"""
+    base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/rap/prod"
+    now = datetime.utcnow()
+    
+    # Try the last 2 days (RAP is more frequent)
+    for days_back in range(2):
+        date = now - timedelta(days=days_back)
+        date_str = date.strftime("%Y%m%d")
+        
+        # Try each run hour (23 to 0)
+        for hour in range(23, -1, -1):
+            run_str = f"{hour:02d}"
+            url = f"{base_url}/rap.{date_str}"
+            try:
+                r = requests.get(url, timeout=10)
+                if r.status_code == 200:
+                    # Check if the run files exist
+                    test_file = f"rap.t{run_str}z.awp130pgrbf00.grib2"
+                    if test_file in r.text:
+                        return date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            except Exception as e:
+                print(f"Error checking RAP run: {str(e)}")
+    return None
+
+def get_latest_nbm_run():
+    """Find the latest available NBM run"""
+    base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/blend/prod"
+    now = datetime.utcnow()
+    
+    # Try the last 2 days
+    for days_back in range(2):
+        date = now - timedelta(days=days_back)
+        date_str = date.strftime("%Y%m%d")
+        
+        # Try each run hour (23 to 0)
+        for hour in range(23, -1, -1):
+            run_str = f"{hour:02d}"
+            url = f"{base_url}/blend.{date_str}"
+            try:
+                r = requests.get(url, timeout=10)
+                if r.status_code == 200:
+                    # Check if the run files exist
+                    test_file = f"blend.t{run_str}z.core.f000.co.grib2"
+                    if test_file in r.text:
+                        return date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            except Exception as e:
+                print(f"Error checking NBM run: {str(e)}")
+    return None
+
+def get_latest_sref_run():
+    """Find the latest available SREF run"""
+    base_url = "https://nomads.ncep.noaa.gov/pub/data/nccf/com/sref/prod"
+    now = datetime.utcnow()
+    
+    # Try the last 3 days
+    for days_back in range(3):
+        date = now - timedelta(days=days_back)
+        date_str = date.strftime("%Y%m%d")
+        
+        # Try each run hour (00, 06, 12, 18)
+        for hour in [18, 12, 6, 0]:
+            run_str = f"{hour:02d}"
+            url = f"{base_url}/sref.{date_str}"
+            try:
+                r = requests.get(url, timeout=10)
+                if r.status_code == 200:
+                    # Check if the run files exist
+                    test_file = f"sref.t{run_str}z.pgrb132.f000.grib2"
+                    if test_file in r.text:
+                        return date.replace(hour=hour, minute=0, second=0, microsecond=0)
+            except Exception as e:
+                print(f"Error checking SREF run: {str(e)}")
+    return None
+
 def download_gfs_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="gfs_gribs", resolution='0.25'):
     os.makedirs(out_dir, exist_ok=True)
     config = MODEL_RESOLUTIONS['gfs'][resolution]
@@ -541,6 +641,141 @@ def download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72,
         except Exception as e:
             logger.error(f"Error downloading HRRR {resolution} forecast hour {fh}: {str(e)}")
 
+def download_nam_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=84, out_dir="nam_gribs"):
+    os.makedirs(out_dir, exist_ok=True)
+    base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_nam.pl"
+    
+    # Get latest available run
+    run_time = get_latest_nam_run()
+    if run_time is None:
+        print("No available NAM runs found in the last 3 days")
+        return
+        
+    run_date = run_time.strftime("%Y%m%d")
+    run_str = run_time.strftime("%H")
+    print(f"Using NAM run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
+    
+    for fh in range(0, hours+1, 3):  # 3-hourly steps
+        params = {
+            "file": f"nam.t{run_str}z.awphys{fh:03d}.tm00.grib2",
+            "lev_2_m_above_ground": "on",
+            "lev_10_m_above_ground": "on",
+            "lev_surface": "on",
+            "var_UGRD": "on" if "u10" in variables else "off",
+            "var_VGRD": "on" if "v10" in variables else "off",
+            "var_TMP": "on" if "t2m" in variables else "off",
+            "var_PRATE": "on" if "prate" in variables else "off",
+            "subregion": "",
+            "leftlon": lon_min,
+            "rightlon": lon_max,
+            "toplat": lat_max,
+            "bottomlat": lat_min,
+            "dir": f"/nam.{run_date}"
+        }
+        url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        out_path = os.path.join(out_dir, f"nam_{run_date}_{run_str}_f{fh:03d}.grib2")
+        print(f"Downloading NAM forecast hour {fh}: {url} ...")
+        try:
+            r = requests.get(url, timeout=30)
+            if r.status_code == 200:
+                with open(out_path, "wb") as f:
+                    f.write(r.content)
+                print(f"Saved {out_path}")
+            else:
+                print(f"Failed to download NAM forecast hour {fh}: {url} (Status code: {r.status_code})")
+        except Exception as e:
+            print(f"Error downloading NAM forecast hour {fh}: {str(e)}")
+
+def download_rap_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=18, out_dir="rap_gribs"):
+    os.makedirs(out_dir, exist_ok=True)
+    base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_rap.pl"
+    
+    # Get latest available run
+    run_time = get_latest_rap_run()
+    if run_time is None:
+        print("No available RAP runs found in the last 2 days")
+        return
+        
+    run_date = run_time.strftime("%Y%m%d")
+    run_str = run_time.strftime("%H")
+    print(f"Using RAP run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
+    
+    for fh in range(0, hours+1, 1):  # hourly steps
+        params = {
+            "file": f"rap.t{run_str}z.awp130pgrbf{fh:02d}.grib2",
+            "lev_2_m_above_ground": "on",
+            "lev_10_m_above_ground": "on",
+            "lev_surface": "on",
+            "var_UGRD": "on" if "u10" in variables else "off",
+            "var_VGRD": "on" if "v10" in variables else "off",
+            "var_TMP": "on" if "t2m" in variables else "off",
+            "var_PRATE": "on" if "prate" in variables else "off",
+            "subregion": "",
+            "leftlon": lon_min,
+            "rightlon": lon_max,
+            "toplat": lat_max,
+            "bottomlat": lat_min,
+            "dir": f"/rap.{run_date}"
+        }
+        url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        out_path = os.path.join(out_dir, f"rap_{run_date}_{run_str}_f{fh:02d}.grib2")
+        print(f"Downloading RAP forecast hour {fh}: {url} ...")
+        try:
+            r = requests.get(url, timeout=30)
+            if r.status_code == 200:
+                with open(out_path, "wb") as f:
+                    f.write(r.content)
+                print(f"Saved {out_path}")
+            else:
+                print(f"Failed to download RAP forecast hour {fh}: {url} (Status code: {r.status_code})")
+        except Exception as e:
+            print(f"Error downloading RAP forecast hour {fh}: {str(e)}")
+
+def download_nbm_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=72, out_dir="nbm_gribs"):
+    os.makedirs(out_dir, exist_ok=True)
+    base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_nbm.pl"
+    
+    # Get latest available run
+    run_time = get_latest_nbm_run()
+    if run_time is None:
+        print("No available NBM runs found in the last 2 days")
+        return
+        
+    run_date = run_time.strftime("%Y%m%d")
+    run_str = run_time.strftime("%H")
+    print(f"Using NBM run from {run_time.strftime('%Y-%m-%d %H:%M UTC')}")
+    
+    for fh in range(0, hours+1, 1):  # hourly steps
+        params = {
+            "file": f"blend.t{run_str}z.core.f{fh:03d}.co.grib2",
+            "lev_2_m_above_ground": "on",
+            "lev_10_m_above_ground": "on",
+            "lev_surface": "on",
+            "var_UGRD": "on" if "u10" in variables else "off",
+            "var_VGRD": "on" if "v10" in variables else "off",
+            "var_TMP": "on" if "t2m" in variables else "off",
+            "var_PRATE": "on" if "prate" in variables else "off",
+            "subregion": "",
+            "leftlon": lon_min,
+            "rightlon": lon_max,
+            "toplat": lat_max,
+            "bottomlat": lat_min,
+            "dir": f"/nbm.{run_date}"
+        }
+        url = base_url + "?" + "&".join(f"{k}={v}" for k, v in params.items())
+        out_path = os.path.join(out_dir, f"nbm_{run_date}_{run_str}_f{fh:03d}.grib2")
+        print(f"Downloading NBM forecast hour {fh}: {url} ...")
+        try:
+            r = requests.get(url, timeout=30)
+            if r.status_code == 200:
+                with open(out_path, "wb") as f:
+                    f.write(r.content)
+                print(f"Saved {out_path}")
+            else:
+                print(f"Failed to download NBM forecast hour {fh}: {url} (Status code: {r.status_code})")
+        except Exception as e:
+            print(f"Error downloading NBM forecast hour {fh}: {str(e)}")
+
 if __name__ == "__main__":
     # Halifax Harbour region
     lat_min, lat_max = 44.5, 44.8
@@ -567,4 +802,10 @@ if __name__ == "__main__":
     download_cmc_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=forecast_hours, resolution=resolutions['cmc'])
     logger.info("\nDownloading HRRR data...")
     download_hrrr_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=forecast_hours, resolution=resolutions['hrrr'])
+    logger.info("\nDownloading NAM data...")
+    download_nam_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=forecast_hours)
+    logger.info("\nDownloading RAP data...")
+    download_rap_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=forecast_hours)
+    logger.info("\nDownloading NBM data...")
+    download_nbm_gribs(lat_min, lat_max, lon_min, lon_max, variables, hours=forecast_hours)
     logger.info("Download complete!") 

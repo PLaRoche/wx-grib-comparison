@@ -40,6 +40,7 @@ Thumbs.db
 # Project specific
 ensemble_output/
 *.grib2
+api_keys.json
 
 # Virtual environments
 venv/

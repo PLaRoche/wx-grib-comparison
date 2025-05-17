@@ -97,57 +97,67 @@ def create_ensemble_visualization(analysis_results, output_dir):
                     # Create a figure with two subplots
                     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 12), height_ratios=[2, 1])
                     
-                    # Assign a color to each model for the violin plot
-                    model_list = list(model_agreement['model'].unique())
-                    colors = sns.color_palette("husl", len(model_list))
-                    legend_patches = []
-                    
-                    for i, model in enumerate(model_list):
+                    # Get all data points for the variable
+                    all_data = []
+                    forecast_hours = []
+                    for model in model_agreement['model'].unique():
                         model_data = model_agreement[model_agreement['model'] == model]
-                        logger.info(f"Plotting {variable} for model {model} with {len(model_data)} points")
+                        all_data.extend(model_data[variable].values)
+                        forecast_hours.extend(model_data['forecast_hour'].values)
+                    
+                    # Create a single violin plot for all data
+                    data_by_hour = []
+                    positions = []
+                    for hour in sorted(model_agreement['forecast_hour'].unique()):
+                        hour_data = model_agreement[model_agreement['forecast_hour'] == hour][variable].values
+                        if len(hour_data) > 1:  # Only include hours with multiple data points
+                            data_by_hour.append(hour_data)
+                            positions.append(hour)
+                    
+                    if data_by_hour:  # Only create violin plot if we have data
+                        parts = ax1.violinplot(
+                            data_by_hour,
+                            positions=positions,
+                            showmeans=True,
+                            showextrema=True
+                        )
                         
-                        # Group data by forecast hour
-                        grouped_data = model_data.groupby('forecast_hour')[variable].apply(list).reset_index()
-                        # Only keep hours with at least 2 data points
-                        filtered = grouped_data[grouped_data[variable].apply(lambda x: len(x) > 1)]
-                        
-                        if not filtered.empty:
-                            # Create violin plot
-                            parts = ax1.violinplot(
-                                filtered[variable].values,
-                                positions=filtered['forecast_hour'],
-                                showmeans=True,
-                                showextrema=True
-                            )
-                            # Set color for this model's violins
-                            for pc in parts['bodies']:
-                                pc.set_facecolor(colors[i])
-                                pc.set_alpha(0.7)
-                            # Add mean line
-                            ax1.plot(filtered['forecast_hour'], 
-                                     [np.mean(x) for x in filtered[variable]], 
-                                     color=colors[i], linestyle='--', alpha=0.7)
-                        else:
-                            # If not enough data for violin plot, just plot the mean line
-                            mean_by_hour = model_data.groupby('forecast_hour')[variable].mean()
-                            ax1.plot(mean_by_hour.index, mean_by_hour.values, 
-                                    color=colors[i], linestyle='--', alpha=0.7)
-                        
-                        # Add to legend
-                        legend_patches.append(Patch(facecolor=colors[i], edgecolor='k', label=model, alpha=0.7))
+                        # Set color for the violin plot
+                        for pc in parts['bodies']:
+                            pc.set_facecolor('lightblue')
+                            pc.set_alpha(0.7)
+                    
+                    # Add mean line for all data points
+                    mean_by_hour = model_agreement.groupby('forecast_hour')[variable].mean()
+                    ax1.plot(mean_by_hour.index, mean_by_hour.values, 
+                            color='blue', linestyle='--', alpha=0.7, label='Ensemble Mean')
+                    
+                    # Add individual data points
+                    for hour in sorted(model_agreement['forecast_hour'].unique()):
+                        hour_data = model_agreement[model_agreement['forecast_hour'] == hour][variable].values
+                        if len(hour_data) == 1:  # Plot single points as scatter
+                            ax1.scatter(hour, hour_data[0], color='red', alpha=0.5, s=30)
                     
                     # Customize violin plot
-                    ax1.set_title(f'{variable.title()} Model Agreement - Distribution')
+                    ax1.set_title(f'{variable.title()} Ensemble Distribution')
                     ax1.set_xlabel('Forecast Hour')
                     ax1.set_ylabel(variable.title())
                     ax1.grid(True)
-                    # Add model legend
-                    if legend_patches:
-                        ax1.legend(handles=legend_patches, title='Model')
+                    ax1.legend()
                     # Show per-hour x-axis
                     ax1.set_xticks(sorted(model_agreement['forecast_hour'].unique()))
                     
                     # Plot 2: Line plot for comparison
+                    model_list = list(model_agreement['model'].unique())
+                    colors = sns.color_palette("husl", len(model_list))
+                    color_dict = dict(zip(model_list, colors))  # Create color mapping dictionary
+                    
+                    # Create legend patches for the violin plot
+                    legend_patches = []
+                    for model, color in color_dict.items():
+                        legend_patches.append(Patch(facecolor=color, alpha=0.7, label=model))
+                    ax1.legend(handles=legend_patches, title='Models')
+                    
                     for i, model in enumerate(model_list):
                         model_data = model_agreement[model_agreement['model'] == model]
                         x_dates = [current_time + timedelta(hours=h) for h in model_data['forecast_hour']]
@@ -155,14 +165,15 @@ def create_ensemble_visualization(analysis_results, output_dir):
                             x_dates,
                             model_data[variable],
                             label=model,
-                            color=colors[i],
-                            alpha=0.7
+                            color=color_dict[model],  # Use consistent colors
+                            alpha=0.7,
+                            linewidth=2  # Make lines more visible
                         )
                     # Customize line plot
                     ax2.set_title(f'{variable.title()} Model Agreement - Time Series')
                     ax2.set_xlabel('Time (UTC)')
                     ax2.set_ylabel(variable.title())
-                    ax2.legend()
+                    ax2.legend(title='Models')  # Add title to legend
                     ax2.grid(True)
                     # Format x-axis to show every 6 hours with date
                     ax2.xaxis.set_major_locator(plt.matplotlib.dates.HourLocator(interval=6))
